@@ -1,12 +1,11 @@
 const controlWrapper = (control) => {
-  const creatingWrapper = async (req, res, next) => {
-    try {
-      await control(req, res, next);
-    } catch (error) {
-      next(error);
+  return (req, res, next) => {
+    const { error } = schema.validate(req.body);
+    if (error) {
+      next(HttpError(400, error.message));
     }
+    next();
   };
-  return creatingWrapper;
 };
 
 module.exports = controlWrapper;
