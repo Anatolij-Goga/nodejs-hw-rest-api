@@ -1,9 +1,22 @@
 const { HttpError, controlWrapper } = require("../helpers");
-const { Contact } = require("../models/contact");
+const { Contact } = require("../models/contactMongoose");
 
-const listContacts = async (req, res) => {
-  const result = await Contact.listContacts();
-  res.status(200).json(result);
+const getContacts = async (req, res) => {
+  const { _id: owner } = req.user;
+  const { page = 1, limit = 10, favorite } = req.query;
+  const skip = (page - 1) * limit;
+  const query = { owner };
+
+  if (favorite) {
+    query.favorite = favorite;
+  }
+
+  const result = await Contact.find(query, "-createdAt -updatedAt", {
+    skip,
+    limit,
+  }).populate("owner", "name email");
+
+  res.json(result);
 };
 
 const getContactById = async (req, res) => {
@@ -49,7 +62,7 @@ const updateStatusContact = async (req, res) => {
 };
 
 module.exports = {
-  listContacts: controlWrapper(listContacts),
+  getContacts: controlWrapper(getContacts),
   getContactById: controlWrapper(getContactById),
   addContact: controlWrapper(addContact),
   removeContact: controlWrapper(removeContact),
