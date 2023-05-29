@@ -1,4 +1,3 @@
-// Id6B61SPFu9pYmvO
 const mongoose = require("mongoose");
 const app = require("./app");
 
