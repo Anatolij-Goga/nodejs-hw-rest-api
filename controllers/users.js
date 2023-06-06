@@ -1,12 +1,23 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const path = require("path");
+const fs = require("fs/promises");
+const { nanoid } = require("nanoid");
+
 const { HttpError, controlWrapper } = require("../helpers");
-const { User } = require("../models/userMongoose");
-const { schemas } = require("../models/userJoi");
-const { SECRET_KEY } = process.env;
+const {
+  User,
+  subscriptionList,
+  avatarManipulator,
+} = require("../models/userMongoose");
+const { registerSchema, loginSchema } = require("../models/userJoi");
+
+const { SECRET_KEY, BASE_URL } = process.env;
+const avatarsDir = path.join(__dirname, "../", "public", "avatars");
 
 const register = async (req, res) => {
-  const { error } = schemas.registerSchema.validate(req.body);
+  const { error } = registerSchema.validate(req.body);
   if (error) {
     throw HttpError(400, (message = "Invalid field value"));
   }
@@ -16,10 +27,12 @@ const register = async (req, res) => {
     throw HttpError(409, "Email already in use");
   }
   const hashedPassword = await bcrypt.hash(password, 10);
+  const avatarURL = gravatar.url(email);
 
   const newUser = await User.create({
     ...req.body,
     password: hashedPassword,
+    avatarURL,
   });
 
   res.status(201).json({
@@ -28,7 +41,7 @@ const register = async (req, res) => {
 };
 
 const login = async (req, res) => {
-  const { error } = schemas.loginSchema.validate(req.body);
+  const { error } = loginSchema.validate(req.body);
   if (error) {
     throw HttpError(400, (message = "Invalid field value"));
   }
@@ -71,9 +84,50 @@ const logout = async (req, res) => {
   });
 };
 
+const updateSubscription = async (req, res) => {
+  const { subscription } = req.body;
+  const { _id: userId } = req.user;
+
+  if (!subscription || !subscriptionList.includes(subscription)) {
+    throw HttpError(401, "Invalid subscription value");
+  }
+
+  const updateUser = await User.findByIdAndUpdate(
+    userId,
+    { subscription },
+    { new: true }
+  );
+
+  res.json({
+    user: {
+      email: updateUser.email,
+      subscription: updateUser.subscription,
+    },
+  });
+};
+
+const updateAvatar = async (req, res) => {
+  const { _id: userId } = req.user;
+  const { path: tempUpload, originalname } = req.file;
+
+  const resultUpload = path.join(avatarsDir, originalname);
+  await fs.rename(tempUpload, resultUpload);
+
+  await avatarManipulator(resultUpload);
+
+  const newFileName = `${userId}_${originalname}`;
+  const avatarURL = path.join("avatars", newFileName);
+
+  await User.findByIdAndUpdate(userId, { avatarURL });
+
+  res.json({ avatarURL });
+};
+
 module.exports = {
   register: controlWrapper(register),
   login: controlWrapper(login),
   getCurrent: controlWrapper(getCurrent),
   logout: controlWrapper(logout),
+  updateSubscription: controlWrapper(updateSubscription),
+  updateAvatar: controlWrapper(updateAvatar),
 };
